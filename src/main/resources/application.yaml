@@ -1,0 +1,34 @@
+spring:
+  application:
+    name: serverless-hello
+
+  cloud:
+    function:
+      definition: api
+      scan:
+        packages: com.ppojin.hello
+
+#  security:
+#    oauth2:
+#      client:
+#        registration:
+#          cognito:
+#            client-id: ${COGNITO_CLIENT_ID}
+#            client-secret: ${COGNITO_CLIENT_SECRET}
+#            scope:
+#              - openid
+#            # Spring Security by default uses a redirect-uri in the format: {baseUrl}/login/oauth2/code/{registrationId}
+#            # For example: http://localhost:8080/login/oauth2/code/cognito
+#            # See more: https://docs.spring.io/spring-security/reference/servlet/oauth2/login/core.html#oauth2login-sample-redirect-uri
+#            redirect-uri: https://www.ppojin.com/api/oauth2
+#        provider:
+#          cognito:
+#            issuerUri: ${COGNITO_ISSUER_URI}
+#            user-name-attribute: username
+
+cognito:
+  client:
+    id: ${COGNITO_CLIENT_ID}
+    secret: ${COGNITO_CLIENT_SECRET}
+  issuer:
+    uri: ${COGNITO_ISSUER_URI}
