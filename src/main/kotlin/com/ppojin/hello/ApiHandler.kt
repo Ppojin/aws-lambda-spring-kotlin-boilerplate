@@ -5,73 +5,79 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.http.MediaType
-import org.springframework.http.client.JdkClientHttpRequestFactory
-import org.springframework.stereotype.Service
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory
+import org.springframework.stereotype.Component
 import org.springframework.util.LinkedMultiValueMap
 import org.springframework.web.client.RestClient
 import java.util.*
 
-@Service
+@Component
 class ApiHandler(
     restClientBuilder: RestClient.Builder,
     @Value("\${cognito.client.id}") private val clientId: String,
     @Value("\${cognito.client.secret}") clientSecret: String,
 ) {
-    private final val restClient: RestClient
+    private final val oauthTokenRestClient: RestClient
 
     init {
         val basicAuth = Base64.getEncoder()
             .encodeToString("$clientId:$clientSecret".toByteArray())
 
-        restClient = restClientBuilder
+        oauthTokenRestClient = restClientBuilder
             .baseUrl("https://cognito.ppojin.com/oauth2/token")
             .defaultHeader("Authorization", "Basic $basicAuth")
-            .requestFactory(JdkClientHttpRequestFactory())
+            .requestFactory(HttpComponentsClientHttpRequestFactory())
             .build()
     }
 
     @Bean
-    fun api(): (APIGatewayProxyRequestEvent) -> APIGatewayProxyResponseEvent = { it: APIGatewayProxyRequestEvent ->
-        if (it.path == "/oauth2") {
-            val authorizationCode = it.queryStringParameters["code"]
+    fun apiGatewayEventHandler(): (APIGatewayProxyRequestEvent) -> APIGatewayProxyResponseEvent = {
+        when (it.path) {
+            "/oauth2" -> oauth2(it)
+            else -> APIGatewayProxyResponseEvent()
+                    .withStatusCode(200)
+                    .withBody(it.path)
+        }
+    }
 
-            val body = LinkedMultiValueMap<String, String>().apply {
-                add("grant_type", "authorization_code")
-                add("client_id", clientId)
-                add("code", authorizationCode ?: "")
-                add("redirect_uri", "https://www.ppojin.com/api/oauth2")
-            }
+    fun oauth2(req: APIGatewayProxyRequestEvent): APIGatewayProxyResponseEvent {
+        println("${req.path} ${req.queryStringParameters}")
 
-            val token = restClient.post()
-                .uri { it.path("/oauth2/token").build() }
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .body(body)
-                .retrieve()
-                .body(AuthToken::class.java)
-                ?: throw IllegalStateException("Failed to retrieve token")
+        val authorizationCode = req.queryStringParameters["code"]
 
-            APIGatewayProxyResponseEvent()
-                .withStatusCode(302)
-                .withHeaders(mapOf(
-                    "Location" to "https://www.ppojin.com/api/test",
-                    "Set-Cookie" to buildString {
-                        append("Authorization=\"Bearer ${token.access_token}\"; ")
+        val body = LinkedMultiValueMap<String, String>().apply {
+            add("grant_type", "authorization_code")
+            add("client_id", clientId)
+            add("code", authorizationCode ?: "")
+            add("redirect_uri", "https://www.ppojin.com/api/oauth2")
+        }
+
+        val token = oauthTokenRestClient.post()
+            .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+            .body(body)
+            .retrieve()
+            .body(AuthToken::class.java)
+            ?: throw IllegalStateException("Failed to retrieve token")
+
+        return APIGatewayProxyResponseEvent()
+            .withStatusCode(302)
+            .withMultiValueHeaders(mapOf(
+                "Location" to listOf("https://www.ppojin.com/api/test"),
+                "Set-Cookie" to listOf(
+                    buildString {
+                        append("Authorization=Bearer ${token.access_token}; ")
                         append("Max-Age=${token.expires_in}; ")
                         append("SameSite=Lax; ")
                         append("HttpOnly; ")
                         append("Secure; ")
                     },
-                    "Set-Cookie" to buildString {
-                        append("Refresh_Token=\"Bearer ${token.refresh_token}\"; ")
-                        append("SameSite=Lax")
+                    buildString {
+                        append("Refresh_Token=${token.refresh_token}; ")
                         append("Max-Age=300; ")
+                        append("SameSite=Lax; ")
                         append("Secure; ")
-                    },
-                ))
-        } else {
-            APIGatewayProxyResponseEvent()
-                .withStatusCode(200)
-                .withBody(it.path)
-        }
+                    }
+                ),
+            ))
     }
 }

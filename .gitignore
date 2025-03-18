@@ -44,3 +44,10 @@ out/
 
 ### security ###
 **/application-security.yaml
+
+### develop ###
+test.http
+
+### lambda ###
+template.yaml
+.aws-sam

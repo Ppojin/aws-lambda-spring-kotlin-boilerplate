@@ -47,6 +47,17 @@ publishing {
     }
 }
 
+val createLayerZip by tasks.registering(Zip::class) {
+    from(configurations.compileClasspath)
+    archiveFileName.set("libs.zip")
+    into("java/lib")
+    destinationDirectory.set(file("build/libs"))
+}
+
+tasks.named("shadowJar") {
+    dependsOn(createLayerZip)
+}
+
 tasks.shadowJar {
     mustRunAfter(tasks.thinJar)
 
@@ -63,11 +74,17 @@ tasks.shadowJar {
         paths = listOf("META-INF/spring.factories")
         mergeStrategy = "append"
     }
+
+    dependencies {
+        exclude(dependency(".*::"))
+    }
 }
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter")
+    implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
+    implementation("org.apache.httpcomponents.client5:httpclient5:5.4.2")
 
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 //    testImplementation("org.springframework.boot:spring-boot-starter-test")
